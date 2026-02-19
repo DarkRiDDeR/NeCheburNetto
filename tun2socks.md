@@ -41,17 +41,32 @@ code (https://raw.githubusercontent.com/DarkRiDDeR/NeCheburNetto/refs/heads/main
 
 ```sh
 #!/bin/sh
-FIRST_IP=$(hostname -I | cut -d ' ' -f1)
-FIRST_INTERFACE=$(ip link show | grep -v 'lo' | head -n 1 | awk '{print $2}' | sed 's/://g')
+
+PROXY_IP="192.168.100.102"
+PROXY_PORT="2085"
+TUN_ADDR="198.18.0.1/32"
+
+FIRST_INTERFACE=$(ip route show default | awk '/default/ {print $5}' | head -n1)
+GATEWAY_IP=$(ip route show default | awk '/default/ {print $3}' | head -n1)
 
 ip tuntap add mode tun dev tun0
-ip addr add 198.18.0.1/15 dev tun0
+ip addr add $TUN_ADDR dev tun0
 ip link set dev tun0 up
-ip route del default
-ip route add default via 198.18.0.1 dev tun0 metric 1
-ip route add default via $FIRST_IP dev $FIRST_INTERFACE metric 10
+ip link set dev tun0 mtu 1400
 
-screen -dmS tun2socks  /home/tun2socks-linux-amd64 -device tun0 -proxy socks5://192.168.100.102:2085 -interface $FIRST_INTERFACE
+ip route del default
+ip route add default dev tun0 metric 1
+ip route add $PROXY_IP/32 via $GATEWAY_IP dev $FIRST_INTERFACE
+ip route append default via $GATEWAY_IP dev $FIRST_INTERFACE metric 10
+
+sysctl -w net.ipv4.conf.all.rp_filter=0
+sysctl -w net.ipv4.conf.default.rp_filter=0
+sysctl -w net.ipv4.conf.$FIRST_INTERFACE.rp_filter=0
+
+screen -dmS tun2socks /home/tun2socks-linux-amd64 \
+    -device tun0 \
+    -proxy socks5://$PROXY_IP:$PROXY_PORT \
+    -interface $FIRST_INTERFACE
 ```
 
 ### run and check ip
